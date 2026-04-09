@@ -1,4 +1,4 @@
-﻿const quizQuestions = [
+const quizQuestions = [
   {
     id: "q1",
     text: "Что тебе интереснее?",
@@ -48,6 +48,56 @@
       { label: "Вылеченный пациент", category: "medicine" },
       { label: "Рост компании и дохода", category: "business" }
     ]
+  },
+  {
+    id: "q6",
+    text: "Что тебе ближе по стилю задач?",
+    options: [
+      { label: "Логика, алгоритмы, точность", category: "it" },
+      { label: "Общение, влияние, переговоры", category: "law" },
+      { label: "Расчёты, схемы, конструкции", category: "engineering" },
+      { label: "Идеи, визуал, творчество", category: "creative" }
+    ]
+  },
+  {
+    id: "q7",
+    text: "Где тебе было бы комфортнее работать?",
+    options: [
+      { label: "В компании с цифровыми продуктами", category: "it" },
+      { label: "В школе, колледже или центре обучения", category: "education" },
+      { label: "В клинике, лаборатории или больнице", category: "medicine" },
+      { label: "В офисе, банке или бизнес-структуре", category: "business" }
+    ]
+  },
+  {
+    id: "q8",
+    text: "Что тебе интереснее создавать?",
+    options: [
+      { label: "Приложения, сайты, сервисы", category: "it" },
+      { label: "Проекты зданий и объектов", category: "engineering" },
+      { label: "Визуал, дизайн, медиа", category: "creative" },
+      { label: "Правовые решения и документы", category: "law" }
+    ]
+  },
+  {
+    id: "q9",
+    text: "Что тебе важнее в будущем?",
+    options: [
+      { label: "Гибкость и рост в цифровой сфере", category: "it" },
+      { label: "Влияние и статус", category: "law" },
+      { label: "Польза людям и обществу", category: "medicine" },
+      { label: "Финансовая стабильность и карьерный рост", category: "business" }
+    ]
+  },
+  {
+    id: "q10",
+    text: "Какой тип задач тебе даётся легче?",
+    options: [
+      { label: "Анализировать данные и искать закономерности", category: "it" },
+      { label: "Объяснять и обучать других", category: "education" },
+      { label: "Организовывать процессы и ресурсы", category: "business" },
+      { label: "Рисовать, придумывать, оформлять", category: "creative" }
+    ]
   }
 ];
 
@@ -56,7 +106,8 @@ const state = {
   score: null,
   selectedProfession: null,
   filteredProfessions: [],
-  quizTopCategory: null
+  quizTopCategory: null,
+  hasSearched: false
 };
 
 const elements = {
@@ -64,7 +115,6 @@ const elements = {
   entRangeInput: document.getElementById("entRangeInput"),
   rangeValue: document.getElementById("rangeValue"),
   startBtn: document.getElementById("startBtn"),
-  scrollToQuizBtn: document.getElementById("scrollToQuizBtn"),
   loadTopBtn: document.getElementById("loadTopBtn"),
 
   heroScore: document.getElementById("heroScore"),
@@ -88,11 +138,16 @@ const elements = {
   quizResetBtn: document.getElementById("quizResetBtn"),
   quizResult: document.getElementById("quizResult"),
 
-  localAiBtn: document.getElementById("localAiBtn"),
-  gptAiBtn: document.getElementById("gptAiBtn"),
-  aiStatus: document.getElementById("aiStatus"),
-  aiOutput: document.getElementById("aiOutput")
+  analysisBtn: document.getElementById("analysisBtn"),
+  analysisOutput: document.getElementById("analysisOutput"),
+  analysisType: document.getElementById("analysisType")
 };
+
+const AI_ENDPOINT = "https://mvpjolguide.onrender.com/api/analyze";
+
+function exists(element) {
+  return Boolean(element);
+}
 
 function formatCurrency(value) {
   return `${new Intl.NumberFormat("ru-RU").format(value)} ₸`;
@@ -108,6 +163,7 @@ function getCategoryLabel(category) {
     engineering: "Инженерия",
     creative: "Творчество"
   };
+
   return labels[category] || category;
 }
 
@@ -134,12 +190,6 @@ function validateScore(value) {
 }
 
 async function loadProfessions() {
-  if (location.protocol === "file:") {
-    throw new Error(
-      "Сайт открыт как файл. Запусти его через Live Server, иначе JSON не загрузится."
-    );
-  }
-
   const response = await fetch("./data/professions.json");
 
   if (!response.ok) {
@@ -151,6 +201,8 @@ async function loadProfessions() {
 }
 
 function syncRangeAndInput(fromRange = true) {
+  if (!exists(elements.entScoreInput) || !exists(elements.entRangeInput) || !exists(elements.rangeValue)) return;
+
   if (fromRange) {
     elements.entScoreInput.value = elements.entRangeInput.value;
     elements.rangeValue.textContent = elements.entRangeInput.value;
@@ -162,6 +214,8 @@ function syncRangeAndInput(fromRange = true) {
 }
 
 function buildSubjectFilter() {
+  if (!exists(elements.subjectFilter)) return;
+
   const subjects = new Set();
 
   state.professions.forEach((profession) => {
@@ -183,7 +237,7 @@ function getFilteredProfessions() {
     list = list.filter((item) => state.score >= item.min_score);
   }
 
-  const query = elements.searchInput.value.trim().toLowerCase();
+  const query = exists(elements.searchInput) ? elements.searchInput.value.trim().toLowerCase() : "";
   if (query) {
     list = list.filter((item) => {
       return (
@@ -194,17 +248,17 @@ function getFilteredProfessions() {
     });
   }
 
-  const category = elements.categoryFilter.value;
+  const category = exists(elements.categoryFilter) ? elements.categoryFilter.value : "all";
   if (category !== "all") {
     list = list.filter((item) => item.category === category);
   }
 
-  const subject = elements.subjectFilter.value;
+  const subject = exists(elements.subjectFilter) ? elements.subjectFilter.value : "all";
   if (subject !== "all") {
     list = list.filter((item) => item.subjects.includes(subject));
   }
 
-  const sort = elements.sortFilter.value;
+  const sort = exists(elements.sortFilter) ? elements.sortFilter.value : "score-asc";
   if (sort === "score-asc") {
     list.sort((a, b) => a.min_score - b.min_score);
   } else if (sort === "score-desc") {
@@ -219,13 +273,21 @@ function getFilteredProfessions() {
 }
 
 function updateHero() {
-  elements.heroScore.textContent = state.score === null ? "—" : state.score;
-  elements.heroCount.textContent = state.filteredProfessions.length;
-  elements.heroTier.textContent = state.score === null ? "—" : getTier(state.score);
+  if (exists(elements.heroScore)) {
+    elements.heroScore.textContent = state.score === null ? "—" : state.score;
+  }
+  if (exists(elements.heroCount)) {
+    elements.heroCount.textContent = state.hasSearched ? state.filteredProfessions.length : 0;
+  }
+  if (exists(elements.heroTier)) {
+    elements.heroTier.textContent = state.score === null ? "—" : getTier(state.score);
+  }
 }
 
 function updateSummaryCards() {
-  if (!state.filteredProfessions.length) {
+  if (!exists(elements.bestProfessionLabel) || !exists(elements.avgStartSalary) || !exists(elements.lowestScoreLabel)) return;
+
+  if (!state.hasSearched || !state.filteredProfessions.length) {
     elements.bestProfessionLabel.textContent = "—";
     elements.avgStartSalary.textContent = "—";
     elements.lowestScoreLabel.textContent = "—";
@@ -247,6 +309,19 @@ function renderResults() {
   state.filteredProfessions = getFilteredProfessions();
   updateHero();
   updateSummaryCards();
+
+  if (!exists(elements.results)) return;
+
+  if (!state.hasSearched) {
+    elements.results.innerHTML = `
+      <div class="panel" style="padding: 20px;">
+        <div class="empty-state">
+          Введи балл ЕНТ и нажми «Показать варианты», чтобы увидеть подходящие профессии.
+        </div>
+      </div>
+    `;
+    return;
+  }
 
   if (!state.filteredProfessions.length) {
     elements.results.innerHTML = `
@@ -276,7 +351,7 @@ function renderResults() {
 
           <div class="meta-list">
             <div><strong>Предметы:</strong> ${item.subjects.join(", ")}</div>
-            <div><strong>Вузы:</strong> ${item.universities.slice(0, 2).join(", ")}</div>
+            <div><strong>Вузы:</strong> ${item.universities.slice(0, 3).join(", ")}</div>
           </div>
 
           <div class="salary-grid">
@@ -296,7 +371,7 @@ function renderResults() {
 
           <div class="card-actions">
             <button class="btn btn-primary" data-action="details" data-id="${item.id}">Подробнее</button>
-            <button class="btn btn-secondary" data-action="local-ai" data-id="${item.id}">AI-анализ</button>
+            <button class="btn btn-secondary" data-action="analysis" data-id="${item.id}">AI-анализ</button>
           </div>
         </article>
       `;
@@ -305,6 +380,8 @@ function renderResults() {
 }
 
 function renderProfessionDetail(profession) {
+  if (!exists(elements.detailPanel)) return;
+
   if (!profession) {
     elements.detailPanel.innerHTML = `<div class="empty-state">Пока профессия не выбрана.</div>`;
     return;
@@ -314,7 +391,7 @@ function renderProfessionDetail(profession) {
     state.score === null
       ? "Сначала введи свой балл ЕНТ, чтобы увидеть точное совпадение."
       : state.score >= profession.min_score
-      ? `Ты уже проходишь по внутреннему MVP-порогу: ${state.score} ≥ ${profession.min_score}.`
+      ? `Ты уже проходишь по внутреннему порогу: ${state.score} ≥ ${profession.min_score}.`
       : `Пока не хватает ${profession.min_score - state.score} балл(ов) до порога ${profession.min_score}.`;
 
   elements.detailPanel.innerHTML = `
@@ -331,7 +408,7 @@ function renderProfessionDetail(profession) {
       </div>
 
       <div class="detail-box">
-        <h3>Зарплатный рост</h3>
+        <h3>Зарплатная перспектива</h3>
         <div class="salary-grid">
           <div class="salary-box">
             <span>Стартовая</span>
@@ -349,7 +426,7 @@ function renderProfessionDetail(profession) {
       </div>
 
       <div class="detail-box">
-        <h3>Вузы</h3>
+        <h3>Подходящие вузы</h3>
         <ul class="detail-list">
           ${profession.universities.map((item) => `<li>${item}</li>`).join("")}
         </ul>
@@ -360,7 +437,7 @@ function renderProfessionDetail(profession) {
         <ul class="detail-list">
           <li>${scoreStatus}</li>
           <li>Проверь, подходят ли тебе предметы: ${profession.subjects.join(" + ")}.</li>
-          <li>Сравни эту профессию не только по престижу, но и по зарплатной траектории.</li>
+          <li>Сравни эту профессию по шансу поступления и зарплатной перспективе.</li>
         </ul>
       </div>
     </div>
@@ -374,12 +451,14 @@ function selectProfession(id, scroll = true) {
   state.selectedProfession = profession;
   renderProfessionDetail(profession);
 
-  if (scroll) {
+  if (scroll && document.getElementById("detail")) {
     document.getElementById("detail").scrollIntoView({ behavior: "smooth" });
   }
 }
 
 function buildQuiz() {
+  if (!exists(elements.quizQuestions)) return;
+
   elements.quizQuestions.innerHTML = quizQuestions
     .map((question, index) => {
       return `
@@ -404,6 +483,8 @@ function buildQuiz() {
 }
 
 function runQuiz() {
+  if (!exists(elements.quizResult)) return;
+
   const answers = {};
 
   for (const question of quizQuestions) {
@@ -431,45 +512,49 @@ function runQuiz() {
   const topCategory = sortedCategories[0][0];
   state.quizTopCategory = topCategory;
 
-  let recommendations = state.professions.filter((item) => item.category === topCategory);
+  const allByCategory = state.professions.filter((item) => item.category === topCategory);
 
+  let reachable = allByCategory;
   if (state.score !== null) {
-    const reachable = recommendations.filter((item) => state.score >= item.min_score);
-    if (reachable.length) {
-      recommendations = reachable;
+    const filtered = allByCategory.filter((item) => state.score >= item.min_score);
+    if (filtered.length) {
+      reachable = filtered;
     }
   }
 
-  const topThree = recommendations.slice(0, 3);
+  const topSix = reachable.slice(0, 6);
 
   elements.quizResult.innerHTML = `
     <div class="detail-box">
       <h3>Результат теста</h3>
       <p class="meta-muted">Твоё ведущее направление: <strong>${getCategoryLabel(topCategory)}</strong></p>
       ${
-        topThree.length
+        topSix.length
           ? `
             <ul class="detail-list">
-              ${topThree.map((item) => `<li><strong>${item.profession}</strong> — от ${item.min_score} баллов</li>`).join("")}
+              ${topSix.map((item) => `<li><strong>${item.profession}</strong> — от ${item.min_score} баллов</li>`).join("")}
             </ul>
           `
-          : `<p class="meta-muted">Под текущий балл профессий мало. Есть смысл поднять результат ЕНТ или посмотреть соседние категории.</p>`
+          : `<p class="meta-muted">Под текущий балл профессий в этой категории пока мало. Есть смысл поднять результат ЕНТ или посмотреть соседние направления.</p>`
       }
     </div>
   `;
 
-  if (topThree[0]) {
-    selectProfession(topThree[0].id, false);
+  if (topSix[0]) {
+    selectProfession(topSix[0].id, false);
   }
 }
 
 function resetQuiz() {
-  document.querySelectorAll('#quiz input[type="radio"]').forEach((input) => {
+  document.querySelectorAll('input[type="radio"]').forEach((input) => {
     input.checked = false;
   });
 
   state.quizTopCategory = null;
-  elements.quizResult.innerHTML = "";
+
+  if (exists(elements.quizResult)) {
+    elements.quizResult.innerHTML = "";
+  }
 }
 
 function getTopReachableProfession() {
@@ -477,107 +562,50 @@ function getTopReachableProfession() {
   return [...state.filteredProfessions].sort((a, b) => b.salary.top - a.salary.top)[0];
 }
 
-function createLocalAIText() {
+async function runRecommendation() {
+  if (!exists(elements.analysisOutput)) return;
+
   const profession = state.selectedProfession || getTopReachableProfession();
-  const score = state.score;
-  const tier = getTier(score);
+  const analysisType = exists(elements.analysisType) ? elements.analysisType.value : "career";
 
-  let text = "";
-  text += `Твой текущий балл ЕНТ: ${score === null ? "не указан" : score}.\n`;
-  text += `Уровень по шкале MVP: ${tier}.\n\n`;
-
-  if (profession) {
-    text += `Рекомендуемая профессия: ${profession.profession}.\n`;
-    text += `Почему она подходит: это понятная связка "поступление → обучение → доход".\n`;
-    text += `Нужные предметы: ${profession.subjects.join(", ")}.\n`;
-    text += `Минимальный порог в MVP: ${profession.min_score}.\n`;
-    text += `Зарплаты: старт ${formatCurrency(profession.salary.start)}, средняя ${formatCurrency(profession.salary.mid)}, высокая ${formatCurrency(profession.salary.top)}.\n\n`;
-
-    if (score !== null) {
-      if (score >= profession.min_score) {
-        text += `По текущему баллу ты уже проходишь на это направление внутри MVP.\n\n`;
-      } else {
-        text += `До этого направления пока не хватает ${profession.min_score - score} балл(ов).\n\n`;
-      }
-    }
-  } else {
-    text += `Сначала введи балл или выбери профессию.\n\n`;
-  }
-
-  if (state.quizTopCategory) {
-    text += `Тест интересов показывает склонность к направлению: ${getCategoryLabel(state.quizTopCategory)}.\n\n`;
-  }
-
-  text += `Что делать дальше:\n`;
-
-  if (score === null) {
-    text += `1) Введи свой балл ЕНТ.\n`;
-    text += `2) Пройди мини-тест.\n`;
-    text += `3) Сравни минимум 3 профессии по зарплатам и предметам.\n`;
-  } else if (score < 70) {
-    text += `1) Сначала цель — выйти в диапазон 70+.\n`;
-    text += `2) Решай профильные предметы каждый день.\n`;
-    text += `3) Сосредоточься на базовых и стабильных направлениях.\n`;
-  } else if (score < 90) {
-    text += `1) Усиль слабые темы в профильных предметах.\n`;
-    text += `2) Делай пробники 2 раза в неделю.\n`;
-    text += `3) Сравни профессии среднего уровня по доходу и реальности поступления.\n`;
-  } else {
-    text += `1) Сравни вузы по направлению подготовки.\n`;
-    text += `2) Смотри не только на проходной балл, но и на будущую зарплату.\n`;
-    text += `3) Добирай баллы точечной работой над ошибками.\n`;
-  }
-
-  return text;
-}
-
-async function runLocalAI() {
-  elements.aiStatus.textContent = "Режим: локальный";
-  elements.aiOutput.textContent = createLocalAIText();
-  document.getElementById("ai").scrollIntoView({ behavior: "smooth" });
-}
-
-async function runGPTAI() {
-  const profession = state.selectedProfession || getTopReachableProfession();
-
-  if (state.score === null && !profession) {
-    elements.aiOutput.textContent = "Сначала введи балл ЕНТ или выбери профессию.";
+  if (!profession && state.score === null) {
+    elements.analysisOutput.textContent = "Сначала введи балл ЕНТ или выбери профессию.";
     return;
   }
 
-  elements.aiStatus.textContent = "Режим: GPT...";
-  elements.aiOutput.textContent = "Готовим персональный анализ...";
+  elements.analysisOutput.textContent = "Формируем персональный разбор...";
 
   try {
-    const response = await fetch("https://informatika-uwzc.onrender.com/api/analyze", {
+    const response = await fetch(AI_ENDPOINT, {
       method: "POST",
       headers: {
         "Content-Type": "application/json"
       },
       body: JSON.stringify({
+        analysisType,
         score: state.score,
         quizCategory: state.quizTopCategory,
         profession
       })
     });
 
+    const data = await response.json();
+
     if (!response.ok) {
-      throw new Error("Backend недоступен");
+      throw new Error(data.error || "Ошибка AI-анализа");
     }
 
-    const data = await response.json();
-    elements.aiStatus.textContent = "Режим: GPT";
-    elements.aiOutput.textContent = data.text || "Ответ пустой.";
+    elements.analysisOutput.textContent = data.text || "Ответ не получен.";
   } catch (error) {
-    elements.aiStatus.textContent = "Режим: локальный (fallback)";
-    elements.aiOutput.textContent =
-      `GPT backend сейчас не отвечает.\n\nПоказываю локальную рекомендацию:\n\n${createLocalAIText()}`;
+    console.error(error);
+    elements.analysisOutput.textContent =
+      "Сейчас AI-анализ недоступен. Проверь сервер или ключ Gemini.";
   }
-
-  document.getElementById("ai").scrollIntoView({ behavior: "smooth" });
 }
 
 function handleScoreSubmit() {
+  if (!exists(elements.entScoreInput)) return;
+
   const result = validateScore(elements.entScoreInput.value);
 
   if (!result.ok) {
@@ -586,14 +614,16 @@ function handleScoreSubmit() {
   }
 
   state.score = result.score;
+  state.hasSearched = true;
   renderResults();
 
   if (state.filteredProfessions[0]) {
     selectProfession(state.filteredProfessions[0].id, false);
   }
 
-  runLocalAI();
-  document.getElementById("finder").scrollIntoView({ behavior: "smooth" });
+  if (document.getElementById("finder")) {
+    document.getElementById("finder").scrollIntoView({ behavior: "smooth" });
+  }
 }
 
 function handleResultsClick(event) {
@@ -614,50 +644,74 @@ function handleResultsClick(event) {
     selectProfession(id);
   }
 
-  if (action === "local-ai") {
+  if (action === "analysis") {
     selectProfession(id, false);
-    runLocalAI();
+    runRecommendation();
   }
 }
 
 function bindEvents() {
-  elements.entRangeInput.addEventListener("input", () => syncRangeAndInput(true));
-  elements.entScoreInput.addEventListener("input", () => syncRangeAndInput(false));
-  elements.startBtn.addEventListener("click", handleScoreSubmit);
+  if (exists(elements.entRangeInput)) {
+    elements.entRangeInput.addEventListener("input", () => syncRangeAndInput(true));
+  }
 
-  elements.entScoreInput.addEventListener("keydown", (event) => {
-    if (event.key === "Enter") {
-      handleScoreSubmit();
-    }
-  });
+  if (exists(elements.entScoreInput)) {
+    elements.entScoreInput.addEventListener("input", () => syncRangeAndInput(false));
+    elements.entScoreInput.addEventListener("keydown", (event) => {
+      if (event.key === "Enter") {
+        handleScoreSubmit();
+      }
+    });
+  }
 
-  elements.searchInput.addEventListener("input", renderResults);
-  elements.categoryFilter.addEventListener("change", renderResults);
-  elements.subjectFilter.addEventListener("change", renderResults);
-  elements.sortFilter.addEventListener("change", renderResults);
+  if (exists(elements.startBtn)) {
+    elements.startBtn.addEventListener("click", handleScoreSubmit);
+  }
 
-  elements.results.addEventListener("click", handleResultsClick);
+  if (exists(elements.searchInput)) {
+    elements.searchInput.addEventListener("input", renderResults);
+  }
 
-  elements.scrollToQuizBtn.addEventListener("click", () => {
-    document.getElementById("quiz").scrollIntoView({ behavior: "smooth" });
-  });
+  if (exists(elements.categoryFilter)) {
+    elements.categoryFilter.addEventListener("change", renderResults);
+  }
 
-  elements.loadTopBtn.addEventListener("click", () => {
-    const profession = getTopReachableProfession();
+  if (exists(elements.subjectFilter)) {
+    elements.subjectFilter.addEventListener("change", renderResults);
+  }
 
-    if (!profession) {
-      alert("Сначала введи балл ЕНТ.");
-      return;
-    }
+  if (exists(elements.sortFilter)) {
+    elements.sortFilter.addEventListener("change", renderResults);
+  }
 
-    selectProfession(profession.id);
-  });
+  if (exists(elements.results)) {
+    elements.results.addEventListener("click", handleResultsClick);
+  }
 
-  elements.quizBtn.addEventListener("click", runQuiz);
-  elements.quizResetBtn.addEventListener("click", resetQuiz);
+  if (exists(elements.loadTopBtn)) {
+    elements.loadTopBtn.addEventListener("click", () => {
+      const profession = getTopReachableProfession();
 
-  elements.localAiBtn.addEventListener("click", runLocalAI);
-  elements.gptAiBtn.addEventListener("click", runGPTAI);
+      if (!profession) {
+        alert("Сначала введи балл ЕНТ.");
+        return;
+      }
+
+      selectProfession(profession.id);
+    });
+  }
+
+  if (exists(elements.quizBtn)) {
+    elements.quizBtn.addEventListener("click", runQuiz);
+  }
+
+  if (exists(elements.quizResetBtn)) {
+    elements.quizResetBtn.addEventListener("click", resetQuiz);
+  }
+
+  if (exists(elements.analysisBtn)) {
+    elements.analysisBtn.addEventListener("click", runRecommendation);
+  }
 }
 
 async function init() {
@@ -666,9 +720,11 @@ async function init() {
     buildSubjectFilter();
     buildQuiz();
 
-    elements.entScoreInput.value = "85";
-    elements.entRangeInput.value = "85";
-    syncRangeAndInput(true);
+    if (exists(elements.entScoreInput) && exists(elements.entRangeInput)) {
+      elements.entScoreInput.value = "85";
+      elements.entRangeInput.value = "85";
+      syncRangeAndInput(true);
+    }
 
     renderResults();
     bindEvents();
@@ -678,21 +734,9 @@ async function init() {
     document.body.innerHTML = `
       <div style="min-height:100vh;display:flex;align-items:center;justify-content:center;padding:24px;background:#08111f;color:#fff;font-family:Inter,sans-serif;">
         <div style="max-width:720px;background:rgba(15,24,44,.95);border:1px solid rgba(255,255,255,.08);border-radius:20px;padding:28px;box-shadow:0 20px 50px rgba(0,0,0,.35);">
-          <h2 style="margin-top:0;">Сайт не смог загрузить данные</h2>
+          <h2 style="margin-top:0;">Не удалось загрузить данные</h2>
           <p style="color:#b8c4df;line-height:1.7;">
-            ${error.message}
-          </p>
-          <p style="color:#b8c4df;line-height:1.7;">
-            Открой проект через <strong>Live Server</strong> в VS Code.
-          </p>
-          <ol style="color:#dce6ff;line-height:1.8;padding-left:20px;">
-            <li>Открой папку проекта в VS Code</li>
-            <li>Установи расширение <strong>Live Server</strong></li>
-            <li>Нажми правой кнопкой на <strong>index.html</strong></li>
-            <li>Выбери <strong>Open with Live Server</strong></li>
-          </ol>
-          <p style="color:#8fa1c8;">
-            Backend для GPT сейчас не обязателен. Мини-тест и подбор профессий работают без него.
+            Проверь файл <strong>data/professions.json</strong> и повтори загрузку сайта.
           </p>
         </div>
       </div>
